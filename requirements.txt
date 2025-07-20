@@ -1,1 +1,7 @@
-
+streamlit
+pandas
+matplotlib
+networkx
+python-dotenv
+langchain
+langchain-groq

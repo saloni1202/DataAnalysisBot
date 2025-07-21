@@ -5,18 +5,18 @@ import tempfile
 import matplotlib.pyplot as plt
 import networkx as nx
 import traceback
-from langchain.prompts import PromptTemplate
-from langchain.chains.llm import LLMChain
-from langchain_groq import ChatGroq
-from dotenv import load_dotenv
 import re
+import graphviz
+from dotenv import load_dotenv
+import google.generativeai as genai
 
 # Load .env for API keys
 load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Streamlit setup
 st.set_page_config(page_title="CSV ERD & Chart Generator", layout="wide")
-st.title("📊 CSV ER Diagram & Chart Generator with LLM")
+st.title("📊 CSV ER Diagram & Chart Generator with LLM (Gemini)")
 
 # Session state init
 if 'csv_data' not in st.session_state:
@@ -32,42 +32,34 @@ if uploaded_files:
 
     st.success(f"Uploaded {len(st.session_state.csv_data)} file(s).")
 
-    # 2. Generate ER Diagram with FK inference
-    st.header("Step 2: Auto-generated ER Diagram (with foreign key inference)")
-    G = nx.DiGraph()
+    # 2. High-Level ER Diagram with Graphviz
+    st.header("Step 2: High-Level ER Diagram (Entity Relationships)")
 
-    # Add nodes
-    for table_name in st.session_state.csv_data:
-        G.add_node(table_name)
-
-    # Foreign key inference logic: *_id -> id in target table
+    relationships = []
     for table_name, df in st.session_state.csv_data.items():
         for col in df.columns:
             if col.endswith('_id'):
-                ref_table_candidate = col[:-3].lower()
-                for target_table, target_df in st.session_state.csv_data.items():
-                    if table_name == target_table:
-                        continue
-                    if 'id' in target_df.columns and ref_table_candidate in target_table.lower():
-                        G.add_edge(table_name, target_table, label=col)
+                ref_entity = col[:-3].capitalize()
+                src_entity = table_name.replace(".csv", "").capitalize()
+                relationships.append((src_entity, ref_entity, col))
 
-    # Add edges for exact common column names
-    for fname, df in st.session_state.csv_data.items():
-        for other_fname, other_df in st.session_state.csv_data.items():
-            if fname == other_fname:
-                continue
-            common_cols = set(df.columns).intersection(set(other_df.columns))
-            for col in common_cols:
-                if not G.has_edge(fname, other_fname):
-                    G.add_edge(fname, other_fname, label=col)
+    dot = graphviz.Digraph(format='png')
+    dot.attr(rankdir='LR', size='8,5')
 
-    # Draw graph
-    fig, ax = plt.subplots(figsize=(10, 7))
-    pos = nx.spring_layout(G, seed=42)
-    nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=2000, font_size=10, ax=ax)
-    labels = nx.get_edge_attributes(G, 'label')
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, ax=ax)
-    st.pyplot(fig)
+    # Nodes
+    all_entities = set()
+    for src, tgt, _ in relationships:
+        all_entities.add(src)
+        all_entities.add(tgt)
+
+    for entity in all_entities:
+        dot.node(entity, shape='box', style='filled', color='lightblue')
+
+    # Edges
+    for src, tgt, label in relationships:
+        dot.edge(src, tgt, label=label, fontsize='10', fontcolor='gray30')
+
+    st.graphviz_chart(dot)
 
     # 3. Business Query to Chart
     st.header("Step 3: Ask Business Query to Generate Chart + Code")
@@ -83,47 +75,47 @@ if uploaded_files:
             f"{fname}: {', '.join(df.columns)}" for fname, df in st.session_state.csv_data.items()
         ])
 
-        # Prompt for LLM
+        # Prompt for Gemini
         prompt = f"""
 You are a Python data analysis assistant.
-Only use the available columns listed below. Do not guess or hallucinate column names.
-Use the correct CSV file where a column exists.
 
-If you want to access the column `department_id`, look at the file which contains that column (like `Teacher.csv`).
+Your task is to write correct, executable Python code using pandas and matplotlib to analyze CSV files and generate visualizations.
 
-If you need to join two tables:
-- Columns ending in `_id` are usually foreign keys.
-- Join these to the `id` column of the referenced table.
-- For example: if `Enrollment.csv` has `course_id` and `Course.csv` has `id`, then join like this:
+🧠 Key Rules to Follow:
+1. **Use only the columns listed below. Do not guess or hallucinate column names.**
+2. **Use only the CSV file where a column is actually present.**
+   - Example: If `department_id` is needed, use the file that contains `department_id` (e.g., Teacher.csv).
+3. **Always load the correct CSVs into pandas using `pd.read_csv()`** with exact file names.
+4. **Rename overlapping or generic column names** like `id`, `name`, `email`, `title`, etc., *immediately* after loading each DataFrame to avoid conflicts during merges.
+   - Use consistent, descriptive names: e.g., `id` in Student.csv becomes `student_id`, `name` becomes `student_name`, etc.
+5. **Always rename merge key columns before merging** to prevent `_x`, `_y` suffixes in the output.
+6. **Perform merges using clearly renamed key columns only.**
+7. **Visualizations must be based on the final processed DataFrame** — make sure column names used in plots exist in the final DataFrame.
+8. **Return only executable Python code — no explanations or comments unless required by Python syntax.**
+9. **Always set labels, titles, and axis information in your matplotlib visualizations for clarity.**
+10. Ensure all matplotlib plots are displayed using `plt.show()`.
 
-  pd.merge(enrollment, course, left_on='course_id', right_on='id')
-
-Do not assume both files have the same column name for joining. Always use the actual column names from the headers.
-
-Use pandas and matplotlib to generate a chart based on the user's query.
-
-CSV Headers:
+📂 CSV Headers:
 {full_header_info}
 
-Query: {user_query}
-
-Return only valid Python code without any explanations.
+📌 User Query:
+{user_query}
 """
 
 
         try:
-            llm = ChatGroq(temperature=0, model_name="deepseek-r1-distill-llama-70b")
-            chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template("{query}"))
-            code = chain.run(query=prompt)
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(prompt)
+            code = response.text
 
-            # Extract Python code from response
+            # Extract code block if present
             code_blocks = re.findall(r"```(?:python)?\n(.*?)```", code, re.DOTALL)
             if code_blocks:
                 code = code_blocks[0]
             else:
                 code = code.strip().split("\n\n")[0]
 
-            code = code.replace("plt.show()", "")  # Remove plt.show()
+            code = code.replace("plt.show()", "")
             st.subheader("🧠 Generated Python Code")
             st.code(code, language='python')
 
@@ -137,9 +129,6 @@ Return only valid Python code without any explanations.
                 if col.endswith("_id") or col.endswith("_name") or col.endswith("_date"):
                     if col not in all_columns:
                         invalid_columns.append(col)
-
-            if invalid_columns:
-                st.warning(f"⚠️ The following column(s) may not exist: {invalid_columns}")
 
             # 4. Run the generated code
             st.subheader("📊 Generated Chart")

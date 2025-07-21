@@ -112,7 +112,7 @@ Return only valid Python code without any explanations.
 
 
         try:
-            llm = ChatGroq(temperature=0, model_name="meta-llama/llama-4-scout-17b-16e-instruct")
+            llm = ChatGroq(temperature=0, model_name="deepseek-r1-distill-llama-70b")
             chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template("{query}"))
             code = chain.run(query=prompt)
 

@@ -61,6 +61,29 @@ if uploaded_files:
 
     st.graphviz_chart(dot)
 
+    # 2.5 UML Diagram (Class Diagram Style)
+    st.header("Step 2.5: UML Diagram (CSV Structure Overview)")
+
+    uml = graphviz.Digraph(format="png")
+    uml.attr(rankdir="TB", size="10,10")
+
+    for table_name, df in st.session_state.csv_data.items():
+        class_name = table_name.replace(".csv", "")
+        fields = "\l".join(df.columns) + "\l"  # left-justified fields with line breaks
+        uml.node(class_name, label=f"{class_name}|{fields}", shape="record", style="filled", fillcolor="lightyellow")
+
+    # Add lines between *_id fields and other tables
+    for table_name, df in st.session_state.csv_data.items():
+        src = table_name.replace(".csv", "")
+        for col in df.columns:
+            if col.endswith("_id"):
+                target = col[:-3].capitalize()
+                uml.edge(src, target, label=col, fontcolor="gray40", fontsize="10")
+
+    st.graphviz_chart(uml)
+
+    ## YHA TAK ADD KRA HAI BAS
+
     # 3. Business Query to Chart
     st.header("Step 3: Ask Business Query to Generate Chart + Code")
     user_query = st.text_area("Enter your query (e.g., 'Show monthly sales trend for top 5 products')")

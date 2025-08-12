@@ -1,0 +1,105 @@
+// client/src/app/components/LoadingSpinner.js
+import React from 'react';
+
+export default function LoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center h-full">
+      <div className="loading-spinner"></div>
+      <p className="text-purple-300 ml-4">Loading...</p>
+    </div>
+  );
+}
+
+
+// client/src/app/components/Layout.js
+"use client";
+
+import { useSession } from "next-auth/react";
+import Header from "./Header";
+import Sidebar from "./Sidebar";
+import LoadingSpinner from "./LoadingSpinner";
+
+export default function Layout({ children, showSidebar = true, showHeader = true }) {
+  const { status } = useSession();
+
+  if (status === "loading") {
+    return <LoadingSpinner />;
+  }
+
+  return (
+    <div className="app-container">
+      {showHeader && <Header />}
+      <div className="main-content-wrapper">
+        {showSidebar && <Sidebar />}
+        <main className="content">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+
+// client/src/app/components/DiagramHtmlRenderer.js
+"use client";
+
+import React, { useRef, useEffect, useState } from 'react';
+
+export default function DiagramHtmlRenderer({ code, height = 400 }) {
+  const iframeRef = useRef(null);
+  const [htmlContent, setHtmlContent] = useState('');
+
+  useEffect(() => {
+    // The Python backend is expected to return the full HTML with styles and script.
+    // So, we just set it as srcDoc.
+    setHtmlContent(code);
+  }, [code]);
+
+  if (!htmlContent) {
+    return <div className="alert-info h-[400px] flex items-center justify-center">No diagram code provided to render.</div>;
+  }
+
+  return (
+    <div className="diagram-iframe-container" style={{ border: '1px solid rgba(138, 43, 226, 0.5)', borderRadius: '8px', overflow: 'hidden' }}>
+      <iframe
+        ref={iframeRef}
+        srcDoc={htmlContent}
+        style={{ width: '100%', height: `${height}px`, border: 'none' }}
+        title="Diagram Renderer"
+        // Sandbox for security: allow only necessary functionalities
+        // `allow-scripts` is needed for Mermaid/PlantUML/Graphviz JS to render.
+        // `allow-same-origin` might be needed if the diagram content refers to external resources from the same origin.
+        // `allow-popups` if diagram export creates a new window.
+        sandbox="allow-scripts allow-same-origin allow-popups"
+      />
+    </div>
+  );
+}
+
+
+// client/src/app/components/ChartRenderer.js
+"use client";
+
+import React from 'react';
+import dynamic from 'next/dynamic';
+
+// Dynamically import ReactApexChart to ensure it's client-side rendered
+const ApexCharts = dynamic(() => import('react-apexcharts'), { ssr: false });
+
+export default function ChartRenderer({ options, series, type = 'bar', height = 300 }) {
+  // If `options` is directly provided as an ApexCharts options object, use it.
+  // If `options` contains a 'series' property, extract it, otherwise use 'series' prop directly.
+  const chartSeries = options?.series || series;
+  const chartOptions = { ...options };
+  delete chartOptions.series; // Ensure series is passed separately to ApexCharts component
+
+  if (!chartSeries || chartSeries.length === 0) {
+    return <div className="text-center text-gray-400 p-4">No data to display chart.</div>;
+  }
+
+  return (
+    <div className="chart-container">
+      <ApexCharts options={chartOptions} series={chartSeries} type={type} height={height} />
+    </div>
+  );
+}

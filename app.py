@@ -16,7 +16,7 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Streamlit setup
 st.set_page_config(page_title="CSV ERD & Chart Generator", layout="wide")
-st.title("📊 CSV ER Diagram & Chart Generator with LLM (Gemini)")
+st.title("📊 ERD & Chart Generator")
 
 # Session state init
 if 'csv_data' not in st.session_state:
@@ -33,7 +33,7 @@ if uploaded_files:
     st.success(f"Uploaded {len(st.session_state.csv_data)} file(s).")
 
     # 2. High-Level ER Diagram with Graphviz
-    st.header("Step 2: High-Level ER Diagram (Entity Relationships)")
+    st.header("Step 2.1: High-Level ER Diagram")
 
     relationships = []
     for table_name, df in st.session_state.csv_data.items():
@@ -62,7 +62,7 @@ if uploaded_files:
     st.graphviz_chart(dot)
 
     # 2.5 UML Diagram (Class Diagram Style)
-    st.header("Step 2.5: UML Diagram (CSV Structure Overview)")
+    st.header("Step 2.2 : UML Diagram")
 
     uml = graphviz.Digraph(format="png")
     uml.attr(rankdir="TB", size="10,10")
@@ -85,7 +85,7 @@ if uploaded_files:
     ## YHA TAK ADD KRA HAI BAS
 
     # 3. Business Query to Chart
-    st.header("Step 3: Ask Business Query to Generate Chart + Code")
+    st.header("Step 3: Ask Business Query")
     user_query = st.text_area("Enter your query (e.g., 'Show monthly sales trend for top 5 products')")
 
     if user_query:
